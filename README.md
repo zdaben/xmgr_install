@@ -22,7 +22,7 @@
 请将下面的命令复制到服务器终端中执行：
 
 ```bash
-apt update && apt install -y curl && bash <(curl -Ls https://raw.githubusercontent.com/zdaben/install_xray/main/install.sh)
+apt update && apt install -y curl && bash <(curl -Ls https://raw.githubusercontent.com/zdaben/xray_install/main/xray-mgr.sh)
 ```
 
 
