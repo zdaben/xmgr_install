@@ -243,7 +243,7 @@ show_menu() {
     while true; do
         clear
         echo -e "${GREEN}=======================================${PLAIN}"
-        echo -e "${CYAN}        Xray 全局中控面板 (xr)         ${PLAIN}"
+        echo -e "${CYAN}        Xray 全局中控面板 (XMGR)         ${PLAIN}"
         echo -e "${GREEN}=======================================${PLAIN}"
         
         # 检查运行状态以显示标签
