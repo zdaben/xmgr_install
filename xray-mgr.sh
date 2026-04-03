@@ -7,18 +7,19 @@ YELLOW='\033[0;33m'
 CYAN='\033[0;36m'
 PLAIN='\033[0m'
 
-INFO_FILE="/usr/local/etc/xray/.xray_info"
-SCRIPT_PATH="/usr/local/bin/xray-mgr"
+# 核心缓存路径 (硬编码，防变量丢失)
+CACHE_FILE="/usr/local/etc/xray/.xray_info"
+SCRIPT_PATH="/usr/local/bin/xr"
 
 # 检查是否为 Root 用户
 [[ $EUID -ne 0 ]] && echo -e "${RED}错误：必须使用 root 用户运行此脚本！${PLAIN}" && exit 1
 
-# 安装系统级命令
+# 安装系统级命令 (变更为极简的 xr 命令)
 if [ "$0" != "$SCRIPT_PATH" ] && [ "$1" != "menu" ]; then
     cp "$0" "$SCRIPT_PATH"
     chmod +x "$SCRIPT_PATH"
-    echo -e "${GREEN}✅ 脚本已注册为系统级命令！${PLAIN}"
-    echo -e "以后在任意目录输入 ${CYAN}xray-mgr${PLAIN} 即可直接唤出本控制台。"
+    echo -e "${GREEN}✅ 控制台已升级并注册为系统级命令！${PLAIN}"
+    echo -e "以后在任意目录输入 ${CYAN}xr${PLAIN} 即可瞬间唤出本看板。"
     sleep 2
     exec "$SCRIPT_PATH" "menu"
 fi
@@ -34,7 +35,7 @@ install_or_reconfig() {
 
     echo -e "${YELLOW}[1/8] 检查并安装基础依赖...${PLAIN}"
     apt-get update -y > /dev/null 2>&1
-    apt-get install -y curl wget tar unzip openssl iproute2 iptables ufw jq > /dev/null 2>&1
+    apt-get install -y curl wget tar unzip openssl iproute2 iptables ufw > /dev/null 2>&1
 
     echo -e "${YELLOW}[2/8] 检查并开启 BBR...${PLAIN}"
     if ! grep -q "net.core.default_qdisc=fq" /etc/sysctl.conf; then
@@ -49,8 +50,8 @@ install_or_reconfig() {
     DEF_PORT=34567
     DEF_SNI="www.bing.com"
     DEF_NAME="zdaben"
-    if [ -f "$INFO_FILE" ]; then
-        source "$INFO_FILE"
+    if [ -f "$CACHE_FILE" ]; then
+        source "$CACHE_FILE"
         DEF_PORT=${XRAY_PORT:-$DEF_PORT}
         DEF_SNI=${XRAY_SNI:-$DEF_SNI}
         DEF_NAME=${XRAY_NAME:-$DEF_NAME}
@@ -66,12 +67,12 @@ install_or_reconfig() {
             continue
         fi
         if [[ "$PORT" == "80" || "$PORT" == "443" ]]; then
-            echo -e "${RED}警告：端口 80 和 443 需留给 Web 服务 (Nginx)，请更换！${PLAIN}"
+            echo -e "${RED}警告：端口 80 和 443 需留给 Web 服务，请更换！${PLAIN}"
             continue
         fi
         # 如果端口改变了，才去检查占用
         if [ "$PORT" != "$DEF_PORT" ] && ss -lntp | grep -q ":$PORT "; then
-            echo -e "${RED}错误：端口 $PORT 已被其他程序占用，请更换！${PLAIN}"
+            echo -e "${RED}错误：端口 $PORT 已被占用，请更换！${PLAIN}"
             continue
         fi
         break
@@ -85,7 +86,7 @@ install_or_reconfig() {
         if [ "$SNI" != "$DEF_SNI" ]; then
             echo -e "正在测试目标域名的 443 端口联通性..."
             if ! timeout 5 bash -c "</dev/tcp/${SNI}/443" 2>/dev/null; then
-                echo -e "${RED}警告：域名 ${SNI} 无法连接或禁用了 443 端口，请更换！${PLAIN}"
+                echo -e "${RED}警告：域名 ${SNI} 无法连接 443 端口，请更换！${PLAIN}"
                 continue
             fi
         fi
@@ -97,12 +98,11 @@ install_or_reconfig() {
     LINK_NAME=${LINK_NAME:-$DEF_NAME}
     LINK_NAME=$(echo "${LINK_NAME}" | xargs)
 
-    echo -e "${YELLOW}[4/8] 安装 Xray 内核...${PLAIN}"
+    echo -e "${YELLOW}[4/8] 部署 Xray 核心引擎...${PLAIN}"
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install > /dev/null 2>&1
 
     echo -e "${YELLOW}[5/8] 生成安全凭证与配置文件...${PLAIN}"
     
-    # 无论是否重装，直接生成全新的安全凭证（确保最高安全性）
     UUID=$(xray uuid)
     SHORT_ID=$(openssl rand -hex 4)
     KEYS=$(xray x25519)
@@ -150,14 +150,14 @@ install_or_reconfig() {
 EOF
     chmod 644 /usr/local/etc/xray/config.json
 
-    echo -e "${YELLOW}[6/8] 自动配置防火墙规则...${PLAIN}"
+    echo -e "${YELLOW}[6/8] 自动配置防火墙放行...${PLAIN}"
     command -v ufw >/dev/null 2>&1 && ufw allow $PORT/tcp >/dev/null 2>&1
     if command -v iptables >/dev/null 2>&1; then
         iptables -I INPUT -p tcp --dport $PORT -j ACCEPT >/dev/null 2>&1
         command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >/dev/null 2>&1
     fi
 
-    echo -e "${YELLOW}[7/8] 重启 Xray 服务...${PLAIN}"
+    echo -e "${YELLOW}[7/8] 重启并应用服务配置...${PLAIN}"
     systemctl enable xray > /dev/null 2>&1
     if ! systemctl restart xray; then
         echo -e "${RED}致命错误：Xray 启动失败！日志如下：${PLAIN}"
@@ -165,11 +165,11 @@ EOF
         exit 1
     fi
 
-    echo -e "${YELLOW}[8/8] 提取节点信息...${PLAIN}"
+    echo -e "${YELLOW}[8/8] 写入缓存并提取节点信息...${PLAIN}"
     IP=$(curl -s4m8 ifconfig.me || curl -s4m8 ip.sb || curl -s4m8 api.ipify.org)
 
-    # 缓存节点信息以便日后查看
-    cat > "$INFO_FILE" <<EOF
+    # 硬编码直接写入缓存文件，防止任何变量逃逸
+    cat > /usr/local/etc/xray/.xray_info <<EOF
 XRAY_PORT=$PORT
 XRAY_SNI=$SNI
 XRAY_NAME=$LINK_NAME
@@ -179,19 +179,22 @@ XRAY_SID=$SHORT_ID
 XRAY_IP=$IP
 EOF
 
-    echo -e "${GREEN}✅ 配置成功！${PLAIN}"
+    echo -e "${GREEN}✅ 配置全部写入成功！${PLAIN}"
+    sleep 1
     view_link
 }
 
 # 2. 查看节点连接
 view_link() {
     clear
-    if [ ! -f "$INFO_FILE" ]; then
-        echo -e "${RED}未找到节点信息缓存，请先执行安装/配置操作！${PLAIN}"
+    if [ ! -f "/usr/local/etc/xray/.xray_info" ]; then
+        echo -e "${RED}未找到节点信息缓存，请先执行安装(选项1)！${PLAIN}"
         read -p "按回车键返回菜单..."
         return
     fi
-    source "$INFO_FILE"
+    
+    # 读取硬盘缓存
+    source "/usr/local/etc/xray/.xray_info"
     LINK="vless://${XRAY_UUID}@${XRAY_IP}:${XRAY_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${XRAY_SNI}&fp=chrome&pbk=${XRAY_PBK}&sid=${XRAY_SID}&type=tcp&headerType=none#${XRAY_NAME}"
 
     echo -e "${GREEN}============================================${PLAIN}"
@@ -203,7 +206,7 @@ view_link() {
     echo -e "用户 UUID : ${YELLOW}${XRAY_UUID}${PLAIN}"
     echo -e "短身份码  : ${YELLOW}${XRAY_SID}${PLAIN}"
     echo -e "${GREEN}============================================${PLAIN}"
-    echo -e "🚀 ${CYAN}分享链接 (VLESS):${PLAIN}"
+    echo -e "🚀 ${CYAN}分享链接 (完整复制此链接导入客户端):${PLAIN}"
     echo -e "${YELLOW}${LINK}${PLAIN}"
     echo -e "${GREEN}============================================${PLAIN}"
     read -p "按回车键返回主菜单..."
@@ -229,7 +232,7 @@ uninstall_xray() {
         systemctl disable xray
         bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove > /dev/null 2>&1
         rm -rf /usr/local/etc/xray
-        rm -f "$SCRIPT_PATH"
+        rm -f "/usr/local/bin/xr"
         echo -e "${GREEN}✅ Xray 已彻底卸载清理完毕。${PLAIN}"
         exit 0
     fi
@@ -240,29 +243,29 @@ show_menu() {
     while true; do
         clear
         echo -e "${GREEN}=======================================${PLAIN}"
-        echo -e "${CYAN}    Xray 运维控制台 (VLESS+Reality)    ${PLAIN}"
+        echo -e "${CYAN}        Xray 全局中控面板 (xr)         ${PLAIN}"
         echo -e "${GREEN}=======================================${PLAIN}"
         
         # 检查运行状态以显示标签
         if systemctl is-active --quiet xray; then
-            echo -e "当前状态: ${GREEN}▶ 运行中 (Active)${PLAIN}"
+            echo -e "当前引擎状态: ${GREEN}▶ 运行中 (Active)${PLAIN}"
         else
-            echo -e "当前状态: ${RED}■ 已停止/未安装 (Inactive)${PLAIN}"
+            echo -e "当前引擎状态: ${RED}■ 已停止/未配置 (Inactive)${PLAIN}"
         fi
         echo -e "${GREEN}=======================================${PLAIN}"
-        echo -e "${YELLOW} 1.${PLAIN} 🚀 安装或重新配置节点 (换端口/域名)"
-        echo -e "${YELLOW} 2.${PLAIN} 🔗 查看当前节点链接 (不再丢失)"
-        echo -e "${YELLOW} 3.${PLAIN} 🔄 重启 Xray 服务"
-        echo -e "${YELLOW} 4.${PLAIN} 📊 查看运行状态与日志"
-        echo -e "${YELLOW} 5.${PLAIN} 🗑️  彻底卸载 Xray"
-        echo -e "${YELLOW} 0.${PLAIN} 退出"
+        echo -e "${YELLOW} 1.${PLAIN} 🚀 部署 / 重新配置参数 (更换端口/域名)"
+        echo -e "${YELLOW} 2.${PLAIN} 🔗 查看节点订阅链接 (随时提取)"
+        echo -e "${YELLOW} 3.${PLAIN} 🔄 重启 Xray 服务引擎"
+        echo -e "${YELLOW} 4.${PLAIN} 📊 查看引擎运行状态与日志"
+        echo -e "${YELLOW} 5.${PLAIN} 🗑️  彻底抹除 Xray 环境"
+        echo -e "${YELLOW} 0.${PLAIN} 退出看板"
         echo -e "${GREEN}=======================================${PLAIN}"
         read -p "请输入序号选择操作: " choice
 
         case $choice in
             1) install_or_reconfig ;;
             2) view_link ;;
-            3) systemctl restart xray && echo -e "${GREEN}✅ 服务已重启！${PLAIN}" && sleep 1 ;;
+            3) systemctl restart xray && echo -e "${GREEN}✅ 引擎已重启！${PLAIN}" && sleep 1 ;;
             4) view_status ;;
             5) uninstall_xray ;;
             0) exit 0 ;;
