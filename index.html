@@ -1,1 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevKit · Developer Utilities</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-alt: #f1f5f9;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --accent: #2563eb;
+      --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+      --ok: #16a34a;
+      --err: #dc2626;
+      --radius: 12px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    [data-theme="dark"] {
+      --bg: #0b1120;
+      --surface: #111827;
+      --surface-alt: #1e293b;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: #1f2937;
+      --accent-soft: color-mix(in srgb, var(--accent) 22%, transparent);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    .topbar-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: -0.01em;
+    }
+    .brand-badge {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+    }
+    .brand-sub {
+      font-weight: 400;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-left: 6px;
+    }
+    .theme-btn {
+      border: 1px solid var(--border);
+      background: var(--surface-alt);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .layout {
+      max-width: 1120px;
+      width: 100%;
+      margin: 24px auto;
+      padding: 0 20px;
+      display: grid;
+      grid-template-columns: 230px 1fr;
+      gap: 20px;
+      flex: 1;
+    }
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .nav-btn {
+      text-align: left;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.92rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .nav-btn:hover { background: var(--surface); color: var(--text); }
+    .nav-btn.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+      font-weight: 600;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .panel-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .panel-head h2 { margin: 0; font-size: 1.2rem; }
+    .panel-desc { margin: 0 0 16px 0; color: var(--text-muted); font-size: 0.9rem; }
+    textarea, input[type="text"], input[type="number"], select {
+      width: 100%;
+      background: var(--surface-alt);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 12px;
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      outline: none;
+    }
+    textarea:focus, input:focus, select:focus { border-color: var(--accent); }
+    textarea { min-height: 190px; resize: vertical; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--surface-alt);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.86rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn:hover { opacity: 0.92; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .stat-box {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .stat-label { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px; }
+    .stat-val { font-family: var(--mono); font-size: 0.98rem; font-weight: 600; word-break: break-all; }
+    .status-msg { font-size: 0.85rem; margin-top: 8px; min-height: 20px; }
+    .status-ok { color: var(--ok); }
+    .status-err { color: var(--err); }
+    .check-group { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0; font-size: 0.88rem; }
+    .check-group label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .footer {
+      max-width: 1120px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 16px 20px 26px;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    @media (max-width: 780px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+      .nav-btn { white-space: nowrap; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .brand-sub { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-badge">{ }</span>
+        <span>DevKit Tools</span>
+        <span class="brand-sub">Client-side Utilities</span>
+      </div>
+      <button id="themeToggle" class="theme-btn" type="button">Dark Mode</button>
+    </div>
+  </header>
 
+  <div class="layout">
+    <aside class="sidebar">
+      <button class="nav-btn active" data-tab="tab-json" type="button">JSON Formatter</button>
+      <button class="nav-btn" data-tab="tab-time" type="button">Timestamp Converter</button>
+      <button class="nav-btn" data-tab="tab-codec" type="button">Base64 &amp; URL Codec</button>
+      <button class="nav-btn" data-tab="tab-gen" type="button">Password &amp; UUID</button>
+      <button class="nav-btn" data-tab="tab-regex" type="button">Regex &amp; Text Stats</button>
+    </aside>
+
+    <main class="card">
+      <section id="tab-json" class="panel active">
+        <div class="panel-head"><h2>JSON Formatter &amp; Validator</h2></div>
+        <p class="panel-desc">Format, validate, or minify JSON payloads locally inside your browser.</p>
+        <textarea id="jsonInput" placeholder='{"project":"sample","active":true,"tags":["web","utils"]}'></textarea>
+        <div class="btn-row">
+          <button id="btnJsonFormat" class="btn btn-primary" type="button">Format (2 Spaces)</button>
+          <button id="btnJsonMinify" class="btn" type="button">Minify</button>
+          <button class="btn" type="button" onclick="copyText('jsonInput','jsonStatus')">Copy</button>
+          <button id="btnJsonClear" class="btn" type="button">Clear</button>
+        </div>
+        <div id="jsonStatus" class="status-msg"></div>
+      </section>
+
+      <section id="tab-time" class="panel">
+        <div class="panel-head"><h2>Unix Timestamp Converter</h2></div>
+        <p class="panel-desc">Convert between Unix timestamps (seconds/milliseconds) and readable ISO dates.</p>
+        <div class="grid-2" style="margin-bottom: 16px;">
+          <div class="stat-box">
+            <div class="stat-label">Current Unix Epoch (s)</div>
+            <div id="nowSec" class="stat-val">-</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Current UTC (ISO 8601)</div>
+            <div id="nowIso" class="stat-val">-</div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="stat-box">
+            <div class="stat-label">Timestamp to Date</div>
+            <input id="tsInput" type="text" placeholder="1700000000">
+            <div class="btn-row"><button id="btnTsConvert" class="btn btn-primary" type="button">Convert</button></div>
+            <div class="stat-label">Local: <span id="tsOutLocal">-</span></div>
+            <div class="stat-label">UTC: <span id="tsOutUtc">-</span></div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Date String to Timestamp</div>
+            <input id="dateInput" type="text" placeholder="2026-01-01 00:00:00">
+            <div class="btn-row"><button id="btnDateConvert" class="btn btn-primary" type="button">Convert</button></div>
+            <div class="stat-label">Unix: <span id="dateOutSec">-</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-codec" class="panel">
+        <div class="panel-head"><h2>Base64 &amp; URL Encoder / Decoder</h2></div>
+        <p class="panel-desc">UTF-8 safe Base64 and URI component encoding/decoding.</p>
+        <textarea id="codecInput" style="min-height:130px" placeholder="Enter text to encode or decode..."></textarea>
+        <div class="btn-row">
+          <button id="btnB64Enc" class="btn btn-primary" type="button">Base64 Encode</button>
+          <button id="btnB64Dec" class="btn" type="button">Base64 Decode</button>
+          <button id="btnUrlEnc" class="btn btn-primary" type="button">URL Encode</button>
+          <button id="btnUrlDec" class="btn" type="button">URL Decode</button>
+          <button class="btn" type="button" onclick="copyText('codecOutput','codecStatus')">Copy Result</button>
+        </div>
+        <textarea id="codecOutput" style="min-height:130px" readonly placeholder="Result..."></textarea>
+        <div id="codecStatus" class="status-msg"></div>
+      </section>
+
+      <section id="tab-gen" class="panel">
+        <div class="panel-head"><h2>Random Password &amp; UUID Generator</h2></div>
+        <p class="panel-desc">Generated locally using Web Crypto API (<code>crypto.getRandomValues</code>).</p>
+        <div class="grid-2">
+          <div class="stat-box">
+            <div class="stat-label">Password Length (8-64)</div>
+            <input id="pwLen" type="number" min="8" max="64" value="20">
+            <div class="check-group">
+              <label><input id="chkUpper" type="checkbox" checked> A-Z</label>
+              <label><input id="chkLower" type="checkbox" checked> a-z</label>
+              <label><input id="chkNum" type="checkbox" checked> 0-9</label>
+              <label><input id="chkSym" type="checkbox" checked> Symbols</label>
+            </div>
+            <input id="pwOutput" type="text" readonly>
+            <div class="btn-row">
+              <button id="btnGenPw" class="btn btn-primary" type="button">Regenerate</button>
+              <button class="btn" type="button" onclick="copyText('pwOutput')">Copy</button>
+            </div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Batch UUID v4</div>
+            <textarea id="uuidOutput" style="min-height:145px" readonly></textarea>
+            <div class="btn-row">
+              <button id="btnGenUuid" class="btn btn-primary" type="button">Generate 5 UUIDs</button>
+              <button class="btn" type="button" onclick="copyText('uuidOutput')">Copy All</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-regex" class="panel">
+        <div class="panel-head"><h2>Regex Tester &amp; Text Counter</h2></div>
+        <div class="grid-2" style="margin-bottom:10px;">
+          <input id="regexPattern" type="text" value="\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b" placeholder="Regular expression...">
+          <input id="regexFlags" type="text" value="g" placeholder="Flags (e.g. gi)">
+        </div>
+        <textarea id="regexText" style="min-height:130px" placeholder="Paste sample text here...">Contact: alice@example.com or support@acme-dev.org for details.</textarea>
+        <div id="textStats" class="status-msg" style="color: var(--text-muted); margin-bottom: 10px;"></div>
+        <textarea id="regexResult" style="min-height:110px" readonly></textarea>
+      </section>
+    </main>
+  </div>
+
+  <footer class="footer">
+    <span>DevKit · Client-side Web Toolbox</span>
+    <span>All computations run locally in your browser.</span>
+  </footer>
+
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const themeBtn = document.getElementById("themeToggle");
+      const savedTheme = localStorage.getItem("site_theme") ||
+        (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      root.setAttribute("data-theme", savedTheme);
+      themeBtn.textContent = savedTheme === "dark" ? "Light Mode" : "Dark Mode";
+
+      themeBtn.addEventListener("click", () => {
+        const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+        root.setAttribute("data-theme", next);
+        localStorage.setItem("site_theme", next);
+        themeBtn.textContent = next === "dark" ? "Light Mode" : "Dark Mode";
+      });
+
+      const navBtns = document.querySelectorAll(".nav-btn");
+      const panels = document.querySelectorAll(".panel");
+      navBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          navBtns.forEach((b) => b.classList.remove("active"));
+          panels.forEach((p) => p.classList.remove("active"));
+          btn.classList.add("active");
+          document.getElementById(btn.dataset.tab).classList.add("active");
+        });
+      });
+
+      window.copyText = function (id, statusId) {
+        const el = document.getElementById(id);
+        const val = el.value !== undefined ? el.value : el.textContent;
+        if (!val) return;
+        const done = () => {
+          if (statusId) {
+            const st = document.getElementById(statusId);
+            st.textContent = "Copied to clipboard.";
+            st.className = "status-msg status-ok";
+          }
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(val).then(done).catch(() => {});
+        } else if (el.select) {
+          el.select();
+          try { document.execCommand("copy"); done(); } catch (e) {}
+        }
+      };
+
+      const jsonInput = document.getElementById("jsonInput");
+      const jsonStatus = document.getElementById("jsonStatus");
+      document.getElementById("btnJsonFormat").addEventListener("click", () => {
+        if (!jsonInput.value.trim()) {
+          jsonStatus.textContent = "Please paste JSON content first.";
+          jsonStatus.className = "status-msg";
+          return;
+        }
+        try {
+          const obj = JSON.parse(jsonInput.value);
+          jsonInput.value = JSON.stringify(obj, null, 2);
+          jsonStatus.textContent = "Valid JSON formatted (" + jsonInput.value.length + " chars).";
+          jsonStatus.className = "status-msg status-ok";
+        } catch (e) {
+          jsonStatus.textContent = "Parse error: " + e.message;
+          jsonStatus.className = "status-msg status-err";
+        }
+      });
+      document.getElementById("btnJsonMinify").addEventListener("click", () => {
+        if (!jsonInput.value.trim()) return;
+        try {
+          const obj = JSON.parse(jsonInput.value);
+          jsonInput.value = JSON.stringify(obj);
+          jsonStatus.textContent = "Valid JSON minified (" + jsonInput.value.length + " chars).";
+          jsonStatus.className = "status-msg status-ok";
+        } catch (e) {
+          jsonStatus.textContent = "Parse error: " + e.message;
+          jsonStatus.className = "status-msg status-err";
+        }
+      });
+      document.getElementById("btnJsonClear").addEventListener("click", () => {
+        jsonInput.value = "";
+        jsonStatus.textContent = "";
+      });
+
+      const nowSecEl = document.getElementById("nowSec");
+      const nowIsoEl = document.getElementById("nowIso");
+      const tsInput = document.getElementById("tsInput");
+      const tsOutLocal = document.getElementById("tsOutLocal");
+      const tsOutUtc = document.getElementById("tsOutUtc");
+      const dateInput = document.getElementById("dateInput");
+      const dateOutSec = document.getElementById("dateOutSec");
+
+      function tickClock() {
+        const d = new Date();
+        nowSecEl.textContent = Math.floor(d.getTime() / 1000);
+        nowIsoEl.textContent = d.toISOString();
+      }
+      tickClock();
+      setInterval(tickClock, 1000);
+
+      tsInput.value = Math.floor(Date.now() / 1000);
+      dateInput.value = new Date().toISOString().slice(0, 19).replace("T", " ");
+
+      function convertTs() {
+        const raw = tsInput.value.trim();
+        if (!/^-?\d+$/.test(raw)) {
+          tsOutLocal.textContent = "Invalid timestamp";
+          tsOutUtc.textContent = "-";
+          return;
+        }
+        let num = Number(raw);
+        if (Math.abs(num) < 1e12) num *= 1000;
+        const d = new Date(num);
+        if (isNaN(d.getTime())) {
+          tsOutLocal.textContent = "Out of range";
+          tsOutUtc.textContent = "-";
+          return;
+        }
+        tsOutLocal.textContent = d.toLocaleString();
+        tsOutUtc.textContent = d.toISOString();
+      }
+      function convertDate() {
+        const d = new Date(dateInput.value.trim());
+        if (isNaN(d.getTime())) {
+          dateOutSec.textContent = "Invalid date string";
+          return;
+        }
+        dateOutSec.textContent = Math.floor(d.getTime() / 1000) + " (s) / " + d.getTime() + " (ms)";
+      }
+      convertTs();
+      convertDate();
+      document.getElementById("btnTsConvert").addEventListener("click", convertTs);
+      document.getElementById("btnDateConvert").addEventListener("click", convertDate);
+
+      const codecIn = document.getElementById("codecInput");
+      const codecOut = document.getElementById("codecOutput");
+      const codecStatus = document.getElementById("codecStatus");
+
+      function utf8ToB64(str) {
+        const bytes = new TextEncoder().encode(str);
+        let bin = "";
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        return btoa(bin);
+      }
+      function b64ToUtf8(b64) {
+        const bin = atob(b64.trim());
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return new TextDecoder().decode(bytes);
+      }
+
+      document.getElementById("btnB64Enc").addEventListener("click", () => {
+        codecOut.value = utf8ToB64(codecIn.value);
+        codecStatus.textContent = "Base64 encoded.";
+        codecStatus.className = "status-msg status-ok";
+      });
+      document.getElementById("btnB64Dec").addEventListener("click", () => {
+        try {
+          codecOut.value = b64ToUtf8(codecIn.value);
+          codecStatus.textContent = "Base64 decoded.";
+          codecStatus.className = "status-msg status-ok";
+        } catch (e) {
+          codecStatus.textContent = "Invalid Base64 input.";
+          codecStatus.className = "status-msg status-err";
+        }
+      });
+      document.getElementById("btnUrlEnc").addEventListener("click", () => {
+        codecOut.value = encodeURIComponent(codecIn.value);
+        codecStatus.textContent = "URL encoded.";
+        codecStatus.className = "status-msg status-ok";
+      });
+      document.getElementById("btnUrlDec").addEventListener("click", () => {
+        try {
+          codecOut.value = decodeURIComponent(codecIn.value);
+          codecStatus.textContent = "URL decoded.";
+          codecStatus.className = "status-msg status-ok";
+        } catch (e) {
+          codecStatus.textContent = "Invalid URL encoded string.";
+          codecStatus.className = "status-msg status-err";
+        }
+      });
+
+      const pwLen = document.getElementById("pwLen");
+      const pwOut = document.getElementById("pwOutput");
+      const uuidOut = document.getElementById("uuidOutput");
+
+      function genPassword() {
+        let chars = "";
+        if (document.getElementById("chkUpper").checked) chars += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        if (document.getElementById("chkLower").checked) chars += "abcdefghijklmnopqrstuvwxyz";
+        if (document.getElementById("chkNum").checked) chars += "0123456789";
+        if (document.getElementById("chkSym").checked) chars += "!@#$%^&*()-_=+[]{}";
+        if (!chars) chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+        const len = Math.max(8, Math.min(64, Number(pwLen.value) || 20));
+        const arr = new Uint32Array(len);
+        window.crypto.getRandomValues(arr);
+        let res = "";
+        for (let i = 0; i < len; i++) res += chars[arr[i] % chars.length];
+        pwOut.value = res;
+      }
+
+      function genUuids() {
+        const list = [];
+        for (let i = 0; i < 5; i++) {
+          if (window.crypto && typeof window.crypto.randomUUID === "function") {
+            list.push(window.crypto.randomUUID());
+          } else {
+            const b = new Uint8Array(16);
+            window.crypto.getRandomValues(b);
+            b[6] = (b[6] & 0x0f) | 0x40;
+            b[8] = (b[8] & 0x3f) | 0x80;
+            const hex = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+            list.push(`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`);
+          }
+        }
+        uuidOut.value = list.join("\n");
+      }
+
+      genPassword();
+      genUuids();
+      document.getElementById("btnGenPw").addEventListener("click", genPassword);
+      document.getElementById("btnGenUuid").addEventListener("click", genUuids);
+
+      const regexPattern = document.getElementById("regexPattern");
+      const regexFlags = document.getElementById("regexFlags");
+      const regexText = document.getElementById("regexText");
+      const regexOut = document.getElementById("regexResult");
+      const textStats = document.getElementById("textStats");
+
+      function runRegexAndStats() {
+        const txt = regexText.value;
+        const lines = txt ? txt.split(/\r?\n/).length : 0;
+        const words = txt.trim() ? txt.trim().split(/\s+/).length : 0;
+        const bytes = new TextEncoder().encode(txt).length;
+        textStats.textContent = `Chars: ${txt.length} | Words: ${words} | Lines: ${lines} | UTF-8 Bytes: ${bytes}`;
+
+        const pat = regexPattern.value;
+        if (!pat) { regexOut.value = ""; return; }
+        try {
+          const re = new RegExp(pat, regexFlags.value);
+          const matches = [];
+          if (re.global) {
+            let m;
+            while ((m = re.exec(txt)) !== null) {
+              matches.push(m[0]);
+              if (m[0] === "") re.lastIndex++;
+              if (matches.length >= 200) break;
+            }
+          } else {
+            const m = re.exec(txt);
+            if (m) matches.push(m[0]);
+          }
+          regexOut.value = matches.length
+            ? `Matched (${matches.length}):\n` + matches.map((s, idx) => `[${idx + 1}] ${s}`).join("\n")
+            : "No matches.";
+        } catch (e) {
+          regexOut.value = "Regex error: " + e.message;
+        }
+      }
+
+      regexPattern.addEventListener("input", runRegexAndStats);
+      regexFlags.addEventListener("input", runRegexAndStats);
+      regexText.addEventListener("input", runRegexAndStats);
+      runRegexAndStats();
+    })();
+  </script>
+</body>
+</html>
