@@ -20,6 +20,7 @@ SYSCTL_FILE="/etc/sysctl.d/99-xray-bbr.conf"
 CADDY_FILE="/etc/caddy/Caddyfile"
 SITE_ROOT="/var/www/site"
 XRAY_INSTALL_URL="https://github.com/XTLS/Xray-install/raw/main/install-release.sh"
+SITE_HTML_URL="https://raw.githubusercontent.com/zdaben/xmgr_install/main/index.html"
 
 # 运行期状态变量
 PKG_MGR=""
@@ -49,7 +50,7 @@ if [ "$0" != "$SCRIPT_PATH" ]; then
         fi
     else
         echo -e "${yellow}[提示] 检测到通过管道或进程替换方式运行，请先下载为本地文件后执行：${plain}"
-        echo -e "  curl -fsSL <脚本Raw地址> -o ${SCRIPT_PATH} && chmod +x ${SCRIPT_PATH} && xmgr install"
+        echo -e "  curl -fsSL https://raw.githubusercontent.com/zdaben/xmgr_install/main/xmgr.sh -o ${SCRIPT_PATH} && chmod +x ${SCRIPT_PATH} && xmgr install"
         exit 1
     fi
 fi
@@ -344,7 +345,7 @@ apply_port_firewall() {
 }
 
 # ==========================================
-# 自动建站模块（Caddy + 静态站点 + 自动 HTTPS 证书）
+# 自动建站模块（Caddy + 远程仓库网页拉取 + 自动 HTTPS 证书）
 # ==========================================
 
 install_caddy_pkg() {
@@ -396,50 +397,36 @@ install_caddy_pkg() {
     return 0
 }
 
+# 从项目 GitHub 仓库拉取站点网页代码并按域名自动定制主题与品牌（附离线回退页面）
+# 参数: $1=域名, $2=是否强制更新(1=强制覆盖托管页面, 0=仅首次/旧占位页更新)
 ensure_static_site_files() {
+    local domain="${1:-DevKit}"
+    local force_refresh="${2:-0}"
+
     mkdir -p "$SITE_ROOT"
     chmod 755 /var/www "$SITE_ROOT" 2>/dev/null || true
 
-    if [ ! -f "${SITE_ROOT}/index.html" ]; then
-        cat > "${SITE_ROOT}/index.html" <<'EOF'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Linux &amp; Systems Engineering Notes</title>
-  <style>
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 760px; margin: 60px auto; padding: 0 24px; color: #24292f; line-height: 1.75; background: #ffffff; }
-    header { border-bottom: 1px solid #d0d7de; padding-bottom: 16px; margin-bottom: 28px; }
-    h1 { font-size: 1.7rem; margin: 0 0 6px 0; }
-    .subtitle { color: #57606a; font-size: 0.95rem; margin: 0; }
-    h2 { font-size: 1.2rem; margin-top: 28px; }
-    code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
-    footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #eaeef2; color: #6e7781; font-size: 0.85rem; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Systems &amp; Network Documentation</h1>
-    <p class="subtitle">Personal technical archive covering Linux administration, systemd, and TLS configuration.</p>
-  </header>
-  <main>
-    <h2>Overview</h2>
-    <p>This site hosts personal reference notes for server maintenance, service hardening, and automated certificate management.</p>
-    <h2>Recent Topics</h2>
-    <ul>
-      <li>Kernel TCP BBR tuning via <code>/etc/sysctl.d/</code></li>
-      <li>Automated ACME TLS certificate lifecycle management</li>
-      <li>Systemd service isolation and least-privilege permissions</li>
-    </ul>
-  </main>
-  <footer>
-    <p>Service Status: Operational</p>
-  </footer>
-</body>
-</html>
-EOF
+    # 基于域名生成差异化品牌名与主题色，防止全网站点特征一致
+    local clean_dom site_brand accent_color hash_num
+    clean_dom=$(echo "$domain" | tr -cd 'a-zA-Z0-9.-')
+    site_brand=$(echo "$clean_dom" | awk -F. '{print toupper(substr($1,1,1)) substr($1,2)}')
+    if [[ "$site_brand" =~ ^(Www|Site|Web|App|Node)$ ]] && [[ "$clean_dom" == *.*.* ]]; then
+        site_brand=$(echo "$clean_dom" | awk -F. '{print toupper(substr($(NF-1),1,1)) substr($(NF-1),2)}')
     fi
+    site_brand=$(echo "$site_brand" | tr -cd 'a-zA-Z0-9_-')
+    [ -z "$site_brand" ] && site_brand="DevKit"
+
+    local palettes=("#2563eb" "#0f766e" "#4f46e5" "#0284c7" "#059669")
+    hash_num=$(printf '%s' "$clean_dom" | cksum | awk '{print $1}')
+    accent_color="${palettes[$(( hash_num % ${#palettes[@]} ))]}"
+
+    # 生成矢量图标与 robots.txt
+    cat > "${SITE_ROOT}/favicon.svg" <<EOF
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="${accent_color}"/>
+  <path d="M23 22L13 32l10 10M41 22l10 10-10 10M35 18l-6 28" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+EOF
 
     if [ ! -f "${SITE_ROOT}/robots.txt" ]; then
         cat > "${SITE_ROOT}/robots.txt" <<'EOF'
@@ -448,7 +435,49 @@ Allow: /
 EOF
     fi
 
-    chmod 644 "${SITE_ROOT}/index.html" "${SITE_ROOT}/robots.txt"
+    local need_write=0
+    if [ ! -f "${SITE_ROOT}/index.html" ] || [ "$force_refresh" = "1" ]; then
+        need_write=1
+    elif grep -q "Systems &amp; Network Documentation" "${SITE_ROOT}/index.html" 2>/dev/null; then
+        need_write=1
+    fi
+
+    if [ "$need_write" -eq 1 ]; then
+        local tmp_html
+        tmp_html=$(mktemp)
+        echo -e "状态: ${yellow}正在从项目仓库拉取最新静态站点网页...${plain}"
+        if curl -fsSLm15 "$SITE_HTML_URL" -o "$tmp_html" 2>/dev/null && grep -qiE '<!doctype html|<html' "$tmp_html"; then
+            sed -i -e "s|DevKit|${site_brand}|g" -e "s|#2563eb|${accent_color}|g" "$tmp_html"
+            mv -f "$tmp_html" "${SITE_ROOT}/index.html"
+            echo -e "${green}[成功] 已部署远程静态网页并完成本地化定制 (${site_brand})。${plain}"
+        else
+            rm -f "$tmp_html"
+            echo -e "${yellow}[提示] 远程仓库网页拉取失败，已启用内置备用静态页面。${plain}"
+            cat > "${SITE_ROOT}/index.html" <<EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${site_brand} · Workspace</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 720px; margin: 60px auto; padding: 0 24px; color: #1e293b; line-height: 1.75; }
+    h1 { border-bottom: 2px solid ${accent_color}; padding-bottom: 10px; font-size: 1.6rem; }
+    .muted { color: #64748b; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>${site_brand} Documentation</h1>
+  <p class="muted">Personal Archive &amp; Utility Notes</p>
+  <p>This static workspace stores personal development notes, configuration snippets, and frontend reference tools.</p>
+</body>
+</html>
+EOF
+        fi
+    fi
+
+    chmod 644 "${SITE_ROOT}/index.html" "${SITE_ROOT}/robots.txt" "${SITE_ROOT}/favicon.svg"
 }
 
 write_caddyfile() {
@@ -474,6 +503,7 @@ write_caddyfile() {
 ${domain} {
     bind ${bind_ip}
     root * ${SITE_ROOT}
+    encode zstd gzip
     file_server
 }
 
@@ -486,6 +516,7 @@ EOF
 # Managed by xmgr (Standard Mode)
 ${domain} {
     root * ${SITE_ROOT}
+    encode zstd gzip
     file_server
 }
 EOF
@@ -525,9 +556,22 @@ setup_caddy_site() {
         fi
     fi
 
+    # 若本机已有 xmgr 托管的 Caddyfile，读取旧域名方便直接回车刷新网页
+    local def_dom=""
+    if [ -f "$CADDY_FILE" ] && grep -q "# Managed by xmgr" "$CADDY_FILE" 2>/dev/null; then
+        def_dom=$(grep -oE '^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' "$CADDY_FILE" 2>/dev/null | head -n 1 || true)
+    fi
+
     local domain=""
     while true; do
-        read -p "请输入已解析到本机的域名或子域名 (直接回车取消): " domain
+        local prompt_dom="请输入已解析到本机的域名或子域名"
+        if [ -n "$def_dom" ]; then
+            prompt_dom+=" [直接回车沿用: ${def_dom}]"
+        else
+            prompt_dom+=" (直接回车取消)"
+        fi
+        read -p "${prompt_dom}: " domain
+        domain=${domain:-$def_dom}
         domain=$(echo "$domain" | xargs | tr '[:upper:]' '[:lower:]')
         [ -z "$domain" ] && return 1
 
@@ -557,7 +601,7 @@ setup_caddy_site() {
     done
 
     install_caddy_pkg || return 1
-    ensure_static_site_files
+    ensure_static_site_files "$domain" "1"
 
     apply_port_firewall 80
     apply_port_firewall 443
@@ -578,7 +622,7 @@ setup_caddy_site() {
         return 1
     fi
 
-    echo -e "状态: ${yellow}正在启动站点并自动申请正式 HTTPS 证书（最多等待 45 秒）...${plain}"
+    echo -e "状态: ${yellow}正在启动站点并验证 HTTPS 证书（最多等待 45 秒）...${plain}"
     systemctl restart caddy
     if ! systemctl is-active --quiet caddy; then
         echo -e "${red}[错误] Caddy 启动失败，最近日志如下：${plain}"
@@ -605,7 +649,7 @@ setup_caddy_site() {
         return 1
     fi
 
-    echo -e "${green}[成功] 站点 https://${domain} 已上线，TLS 证书签发通过！${plain}"
+    echo -e "${green}[成功] 站点 https://${domain} 已上线，TLS 证书验证通过！${plain}"
     SETUP_CADDY_DOMAIN="$domain"
 
     if [ "$caller" = "install" ]; then
@@ -629,7 +673,7 @@ setup_caddy_site() {
             SETUP_CADDY_TARGET=$(format_host_port "$lo_ip" "8443")
         fi
     else
-        echo -e "${green}[完成] 站点部署成功，可随时运行 ${yellow}xmgr install${green} 对接该站点。${plain}"
+        echo -e "${green}[完成] 站点部署/更新成功，请刷新浏览器查看最新页面。${plain}"
     fi
     return 0
 }
@@ -898,6 +942,11 @@ install_xray() {
         if [ "$sel" -gt 0 ]; then
             USE_LOCAL_SITE=1
             SNI="${VALID_LOCAL_DOMAINS[$((sel - 1))]}"
+
+            # 若为 xmgr 托管站点，顺便检查是否需要升级旧版占位页面
+            if [ -f "$CADDY_FILE" ] && grep -q "# Managed by xmgr" "$CADDY_FILE" 2>/dev/null; then
+                ensure_static_site_files "$SNI" "0"
+            fi
 
             if [ "$ALREADY_MIGRATED" -eq 1 ]; then
                 PORT=443
@@ -1246,7 +1295,7 @@ show_help() {
     echo -e " 使用方法: ${green}xmgr${plain} [命令]"
     echo ""
     echo -e "   ${green}install${plain}   - 一键部署或重配节点 (自动检测站点/自动建站/安全加固)"
-    echo -e "   ${green}site${plain}      - 单独部署 Caddy 本地伪装静态站点并自动申请 HTTPS 证书"
+    echo -e "   ${green}site${plain}      - 部署或拉取更新 GitHub 托管的静态站点页面"
     echo -e "   ${green}update${plain}    - 仅升级 Xray-core 内核 (保留现有密钥与链接)"
     echo -e "   ${green}link${plain}      - 查看当前节点参数与订阅链接"
     echo -e "   ${green}restart${plain}   - 重启 Xray 核心服务"
