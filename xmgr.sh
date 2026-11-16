@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# Xray (VLESS + Reality) 极简加固部署脚本
+# Xray (VLESS + Reality) 极简稳定部署脚本
 # ==========================================
 
 # 终端配色定义
@@ -49,7 +49,7 @@ if [ "$0" != "$SCRIPT_PATH" ]; then
             exit 0
         fi
     else
-        echo -e "${yellow}[提示] 检测到通过管道或进程替换方式运行，请先下载为本地文件后执行：${plain}"
+        echo -e "${yellow}[提示] 检测到通过管道方式运行，请先下载为本地文件后执行：${plain}"
         echo -e "  curl -fsSL https://raw.githubusercontent.com/zdaben/xmgr_install/main/xmgr.sh -o ${SCRIPT_PATH} && chmod +x ${SCRIPT_PATH} && xmgr install"
         exit 1
     fi
@@ -345,7 +345,7 @@ apply_port_firewall() {
 }
 
 # ==========================================
-# 自动建站模块（Caddy + 远程仓库网页拉取 + 自动 HTTPS 证书）
+# 自动建站模块（Caddy + GitHub 网页拉取 + 自动 HTTPS）
 # ==========================================
 
 install_caddy_pkg() {
@@ -397,36 +397,13 @@ install_caddy_pkg() {
     return 0
 }
 
-# 从项目 GitHub 仓库拉取站点网页代码并按域名自动定制主题与品牌（附离线回退页面）
-# 参数: $1=域名, $2=是否强制更新(1=强制覆盖托管页面, 0=仅首次/旧占位页更新)
+# 从 GitHub 仓库拉取静态网页（失败时使用内置极简兜底页）
+# 参数: $1=是否强制刷新(1=强制覆盖, 0=仅缺失时拉取)
 ensure_static_site_files() {
-    local domain="${1:-DevKit}"
-    local force_refresh="${2:-0}"
+    local force_refresh="${1:-0}"
 
     mkdir -p "$SITE_ROOT"
     chmod 755 /var/www "$SITE_ROOT" 2>/dev/null || true
-
-    # 基于域名生成差异化品牌名与主题色，防止全网站点特征一致
-    local clean_dom site_brand accent_color hash_num
-    clean_dom=$(echo "$domain" | tr -cd 'a-zA-Z0-9.-')
-    site_brand=$(echo "$clean_dom" | awk -F. '{print toupper(substr($1,1,1)) substr($1,2)}')
-    if [[ "$site_brand" =~ ^(Www|Site|Web|App|Node)$ ]] && [[ "$clean_dom" == *.*.* ]]; then
-        site_brand=$(echo "$clean_dom" | awk -F. '{print toupper(substr($(NF-1),1,1)) substr($(NF-1),2)}')
-    fi
-    site_brand=$(echo "$site_brand" | tr -cd 'a-zA-Z0-9_-')
-    [ -z "$site_brand" ] && site_brand="DevKit"
-
-    local palettes=("#2563eb" "#0f766e" "#4f46e5" "#0284c7" "#059669")
-    hash_num=$(printf '%s' "$clean_dom" | cksum | awk '{print $1}')
-    accent_color="${palettes[$(( hash_num % ${#palettes[@]} ))]}"
-
-    # 生成矢量图标与 robots.txt
-    cat > "${SITE_ROOT}/favicon.svg" <<EOF
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="${accent_color}"/>
-  <path d="M23 22L13 32l10 10M41 22l10 10-10 10M35 18l-6 28" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-EOF
 
     if [ ! -f "${SITE_ROOT}/robots.txt" ]; then
         cat > "${SITE_ROOT}/robots.txt" <<'EOF'
@@ -435,49 +412,39 @@ Allow: /
 EOF
     fi
 
-    local need_write=0
     if [ ! -f "${SITE_ROOT}/index.html" ] || [ "$force_refresh" = "1" ]; then
-        need_write=1
-    elif grep -q "Systems &amp; Network Documentation" "${SITE_ROOT}/index.html" 2>/dev/null; then
-        need_write=1
-    fi
-
-    if [ "$need_write" -eq 1 ]; then
         local tmp_html
         tmp_html=$(mktemp)
-        echo -e "状态: ${yellow}正在从项目仓库拉取最新静态站点网页...${plain}"
+        echo -e "状态: ${yellow}正在从 GitHub 拉取最新静态网页...${plain}"
         if curl -fsSLm15 "$SITE_HTML_URL" -o "$tmp_html" 2>/dev/null && grep -qiE '<!doctype html|<html' "$tmp_html"; then
-            sed -i -e "s|DevKit|${site_brand}|g" -e "s|#2563eb|${accent_color}|g" "$tmp_html"
             mv -f "$tmp_html" "${SITE_ROOT}/index.html"
-            echo -e "${green}[成功] 已部署远程静态网页并完成本地化定制 (${site_brand})。${plain}"
+            echo -e "${green}[成功] 已部署 GitHub 远程静态网页。${plain}"
         else
             rm -f "$tmp_html"
-            echo -e "${yellow}[提示] 远程仓库网页拉取失败，已启用内置备用静态页面。${plain}"
-            cat > "${SITE_ROOT}/index.html" <<EOF
+            echo -e "${yellow}[提示] 远程网页拉取失败，已启用内置极简兜底页面。${plain}"
+            cat > "${SITE_ROOT}/index.html" <<'EOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${site_brand} · Workspace</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <title>Workspace · Documentation</title>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; max-width: 720px; margin: 60px auto; padding: 0 24px; color: #1e293b; line-height: 1.75; }
-    h1 { border-bottom: 2px solid ${accent_color}; padding-bottom: 10px; font-size: 1.6rem; }
-    .muted { color: #64748b; font-size: 0.9rem; }
+    h1 { border-bottom: 2px solid #2563eb; padding-bottom: 10px; font-size: 1.5rem; }
+    p { color: #475569; }
   </style>
 </head>
 <body>
-  <h1>${site_brand} Documentation</h1>
-  <p class="muted">Personal Archive &amp; Utility Notes</p>
-  <p>This static workspace stores personal development notes, configuration snippets, and frontend reference tools.</p>
+  <h1>Personal Workspace</h1>
+  <p>Static archive for development notes, configuration snippets, and frontend references.</p>
 </body>
 </html>
 EOF
         fi
     fi
 
-    chmod 644 "${SITE_ROOT}/index.html" "${SITE_ROOT}/robots.txt" "${SITE_ROOT}/favicon.svg"
+    chmod 644 "${SITE_ROOT}/index.html" "${SITE_ROOT}/robots.txt"
 }
 
 write_caddyfile() {
@@ -498,6 +465,9 @@ write_caddyfile() {
 {
     https_port 8443
     auto_https disable_redirects
+    servers {
+        protocols h1 h2
+    }
 }
 
 ${domain} {
@@ -556,7 +526,6 @@ setup_caddy_site() {
         fi
     fi
 
-    # 若本机已有 xmgr 托管的 Caddyfile，读取旧域名方便直接回车刷新网页
     local def_dom=""
     if [ -f "$CADDY_FILE" ] && grep -q "# Managed by xmgr" "$CADDY_FILE" 2>/dev/null; then
         def_dom=$(grep -oE '^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' "$CADDY_FILE" 2>/dev/null | head -n 1 || true)
@@ -601,7 +570,7 @@ setup_caddy_site() {
     done
 
     install_caddy_pkg || return 1
-    ensure_static_site_files "$domain" "1"
+    ensure_static_site_files "1"
 
     apply_port_firewall 80
     apply_port_firewall 443
@@ -658,7 +627,7 @@ setup_caddy_site() {
             if caddy validate --config "$CADDY_FILE" >/dev/null 2>&1 && systemctl reload caddy >/dev/null 2>&1; then
                 sleep 1
                 if ! is_port_in_use 443 && is_port_in_use 8443; then
-                    echo -e "自动配置: ${cyan}已将 Web 站点切换至本地 8443，443 主端口由 Xray 独占接管（80 端口保留用于证书自动续签）${plain}"
+                    echo -e "自动配置: ${cyan}已将 Web 站点切换至本地 8443，443 主端口由 Xray 独占接管（80 端口保留用于证书续签）${plain}"
                     SETUP_CADDY_PORT=443
                     SETUP_CADDY_TARGET=$(format_host_port "$lo_ip" "8443")
                     return 0
@@ -867,11 +836,11 @@ migrate_local_web_to_8443() {
 # 核心功能函数
 # ==========================================
 
-# 1. 极简最优自动部署流程
+# 1. 最优兼容部署流程
 install_xray() {
     clear
     echo -e "${green}=================================================${plain}"
-    echo -e "${green}        Xray (VLESS + Reality) 一键加固部署      ${plain}"
+    echo -e "${green}        Xray (VLESS + Reality) 一键部署          ${plain}"
     echo -e "${green}=================================================${plain}"
     echo ""
 
@@ -943,9 +912,8 @@ install_xray() {
             USE_LOCAL_SITE=1
             SNI="${VALID_LOCAL_DOMAINS[$((sel - 1))]}"
 
-            # 若为 xmgr 托管站点，顺便检查是否需要升级旧版占位页面
             if [ -f "$CADDY_FILE" ] && grep -q "# Managed by xmgr" "$CADDY_FILE" 2>/dev/null; then
-                ensure_static_site_files "$SNI" "0"
+                ensure_static_site_files "0"
             fi
 
             if [ "$ALREADY_MIGRATED" -eq 1 ]; then
@@ -1002,7 +970,7 @@ install_xray() {
 
     if [ -z "$SNI" ]; then
         echo ""
-        echo -e "${yellow}[提示] 请输入一个支持 TLS 1.3 的常见合规网站域名（如同地区云厂商/门户/工具站，尽量避开大众默认域名）。${plain}"
+        echo -e "${yellow}[提示] 请输入一个支持 TLS 1.3 的常见合规网站域名（如同地区云厂商/门户/工具站）。${plain}"
         while true; do
             local prompt_sni="请输入外部伪装域名 (SNI)"
             [ -n "$DEF_SNI" ] && prompt_sni+=" [直接回车沿用: ${DEF_SNI}]"
@@ -1059,9 +1027,9 @@ install_xray() {
     LINK_NAME=$(echo "$LINK_NAME" | xargs)
     [ -z "$LINK_NAME" ] && LINK_NAME="xmgr-node"
 
-    # ---- 步骤 5: 自动生成最优兼容配置并部署 ----
+    # ---- 步骤 5: 生成高兼容配置并启动服务 ----
     echo ""
-    echo -e "状态: ${yellow}正在生成高强度密钥与最优安全配置...${plain}"
+    echo -e "状态: ${yellow}正在生成密钥与配置文件...${plain}"
 
     local UUID SHORT_ID KEYS PRIVATE_KEY PUBLIC_KEY
     UUID=$(xray uuid)
@@ -1113,7 +1081,7 @@ install_xray() {
                   xver: 0,
                   serverNames: [$sni],
                   privateKey: $priv,
-                  maxTimeDiff: 60000,
+                  maxTimeDiff: 300000,
                   shortIds: [$sid]
                 }
               },
@@ -1125,23 +1093,11 @@ install_xray() {
             }
           ],
           outbounds: [
-            { protocol: "freedom", tag: "direct" },
-            { protocol: "blackhole", tag: "blocked" }
-          ],
-          routing: {
-            domainStrategy: "AsIs",
-            rules: [
-              { type: "field", ip: ["geoip:private"], outboundTag: "blocked" },
-              { type: "field", protocol: ["bittorrent"], outboundTag: "blocked" }
-            ]
-          }
+            { protocol: "freedom", tag: "direct" }
+          ]
         }' > "$CONFIG_FILE"
 
-    local xray_user
-    xray_user=$(systemctl show -p User --value xray 2>/dev/null || echo "root")
-    [ -z "$xray_user" ] && xray_user="root"
-    chown "$xray_user" "$CONFIG_FILE"
-    chmod 600 "$CONFIG_FILE"
+    chmod 644 "$CONFIG_FILE"
 
     if ! xray run -test -c "$CONFIG_FILE" >/dev/null 2>&1; then
         echo -e "${red}[错误] 配置文件校验未通过：${plain}"
@@ -1169,7 +1125,6 @@ install_xray() {
         printf 'XRAY_FLOW=%q\n' "$FLOW_VAL"
         printf 'XRAY_FP=%q\n' "$FP"
     } > "$CACHE_FILE"
-    chown root:root "$CACHE_FILE"
     chmod 600 "$CACHE_FILE"
 
     echo "-------------------------------------------------"
@@ -1178,7 +1133,7 @@ install_xray() {
     show_link
 }
 
-# 2. 查看节点信息与唯一订阅链接
+# 2. 查看节点信息与订阅链接
 show_link() {
     if [ ! -f "$CACHE_FILE" ]; then
         echo -e "${red}[错误] 未找到配置信息，请先运行 xmgr install 进行部署。${plain}"
@@ -1294,7 +1249,7 @@ show_help() {
     echo -e " Xray (VLESS + Reality) 命令行管理脚本"
     echo -e " 使用方法: ${green}xmgr${plain} [命令]"
     echo ""
-    echo -e "   ${green}install${plain}   - 一键部署或重配节点 (自动检测站点/自动建站/安全加固)"
+    echo -e "   ${green}install${plain}   - 一键部署或重配节点 (自动检测站点/自动建站)"
     echo -e "   ${green}site${plain}      - 部署或拉取更新 GitHub 托管的静态站点页面"
     echo -e "   ${green}update${plain}    - 仅升级 Xray-core 内核 (保留现有密钥与链接)"
     echo -e "   ${green}link${plain}      - 查看当前节点参数与订阅链接"
