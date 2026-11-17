@@ -3,95 +3,334 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="robots" content="index, follow">
-  <title>Workspace · Technical Notes</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%232563eb'/><path d='M23 22L13 32l10 10M41 22l10 10-10 10M35 18l-6 28' fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <title>DevBench · Client-Side Developer Utilities</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%232563eb'/><path d='M22 22L12 32l10 10M42 22l10 10-10 10M35 18l-6 28' fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <style>
     :root {
       --bg: #f8fafc;
-      --card: #ffffff;
+      --surface: #ffffff;
+      --surface-2: #f1f5f9;
       --text: #0f172a;
       --muted: #64748b;
       --border: #e2e8f0;
       --accent: #2563eb;
-      --code-bg: #f1f5f9;
+      --accent-hover: #1d4ed8;
+      --accent-soft: rgba(37, 99, 235, 0.1);
+      --ok: #16a34a;
+      --err: #dc2626;
+      --err-bg: rgba(220, 38, 38, 0.08);
+      --mark: #fde047;
+      --mark-text: #0f172a;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0f172a;
-        --card: #1e293b;
-        --text: #f1f5f9;
-        --muted: #94a3b8;
-        --border: #334155;
-        --accent: #60a5fa;
-        --code-bg: #0f172a;
-      }
+
+    [data-theme="dark"] {
+      --bg: #0b1120;
+      --surface: #111827;
+      --surface-2: #1e293b;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --border: #263244;
+      --accent: #3b82f6;
+      --accent-hover: #60a5fa;
+      --accent-soft: rgba(59, 130, 246, 0.15);
+      --ok: #4ade80;
+      --err: #f87171;
+      --err-bg: rgba(248, 113, 113, 0.12);
+      --mark: rgba(250, 204, 21, 0.3);
+      --mark-text: #fef08a;
     }
+
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: var(--sans);
       background: var(--bg);
       color: var(--text);
-      line-height: 1.7;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-    .wrap {
-      max-width: 780px;
+
+    .container {
+      width: 100%;
+      max-width: 1040px;
       margin: 0 auto;
-      padding: 48px 20px 64px;
+      padding: 0 20px;
     }
+
     header {
       border-bottom: 1px solid var(--border);
-      padding-bottom: 20px;
-      margin-bottom: 28px;
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 20;
     }
-    h1 {
-      margin: 0 0 6px;
-      font-size: 1.65rem;
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 60px;
+      flex-wrap: wrap;
+      padding: 10px 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.05rem;
       letter-spacing: -0.02em;
     }
-    .sub {
-      margin: 0;
-      color: var(--muted);
-      font-size: 0.95rem;
+
+    .brand-badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-soft);
+      padding: 2px 8px;
+      border-radius: 999px;
     }
-    .grid {
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 12px 0 0;
+    }
+
+    .tab-btn {
+      appearance: none;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--sans);
+      font-size: 0.88rem;
+      font-weight: 500;
+      padding: 8px 14px;
+      border-radius: 8px 8px 0 0;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+      border-bottom: 2px solid transparent;
+    }
+
+    .tab-btn:hover { color: var(--text); background: var(--surface-2); }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      background: var(--accent-soft);
+      font-weight: 600;
+    }
+
+    main {
+      flex: 1;
+      padding: 24px 0 48px;
+    }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .card-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .card-desc {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin: 2px 0 0;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 0.84rem;
+      font-weight: 500;
+      padding: 7px 13px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover { border-color: var(--muted); }
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+    .grid-2 {
       display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 16px;
     }
-    article {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 20px 22px;
+
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr; }
     }
-    article h2 {
-      margin: 0 0 8px;
-      font-size: 1.1rem;
-      color: var(--accent);
-    }
-    article p {
-      margin: 0 0 12px;
+
+    label.field-label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
       color: var(--muted);
-      font-size: 0.95rem;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
     }
-    pre {
-      margin: 0;
-      padding: 12px 14px;
-      background: var(--code-bg);
+
+    textarea, input[type="text"], input[type="number"], select {
+      width: 100%;
+      background: var(--surface-2);
+      color: var(--text);
       border: 1px solid var(--border);
       border-radius: 8px;
-      overflow-x: auto;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.85rem;
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 0.86rem;
       line-height: 1.5;
+      outline: none;
+      transition: border-color 0.15s ease;
     }
-    footer {
-      margin-top: 36px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border);
+
+    textarea { min-height: 300px; resize: vertical; }
+    textarea:focus, input:focus, select:focus { border-color: var(--accent); }
+
+    .status-bar {
+      margin-top: 10px;
+      font-size: 0.82rem;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: var(--surface-2);
       color: var(--muted);
-      font-size: 0.85rem;
+      font-family: var(--mono);
+      word-break: break-word;
+    }
+    .status-bar.ok { color: var(--ok); }
+    .status-bar.err { color: var(--err); background: var(--err-bg); }
+
+    .kv-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .kv-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .kv-meta { min-width: 0; flex: 1; }
+    .kv-key { font-size: 0.76rem; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+    .kv-val {
+      font-family: var(--mono);
+      font-size: 0.86rem;
+      word-break: break-all;
+      margin-top: 2px;
+    }
+
+    .opt-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .check-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.86rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .regex-preview {
+      min-height: 140px;
+      padding: 10px 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: 0.86rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    mark {
+      background: var(--mark);
+      color: var(--mark-text);
+      border-radius: 3px;
+      padding: 0 2px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: var(--text);
+      color: var(--bg);
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 0.84rem;
+      font-weight: 500;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: all 0.2s ease;
+      z-index: 50;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 16px 0;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .footer-inner {
       display: flex;
       justify-content: space-between;
       flex-wrap: wrap;
@@ -100,39 +339,554 @@
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Workspace &amp; Notes</h1>
-      <p class="sub">Personal archive for Linux administration, networking, and daily CLI references.</p>
-    </header>
+  <header>
+    <div class="container">
+      <div class="header-inner">
+        <div class="brand">
+          <span>DevBench</span>
+          <span class="brand-badge">Offline Ready</span>
+        </div>
+        <div class="toolbar">
+          <button class="btn" id="themeBtn" type="button">Theme</button>
+        </div>
+      </div>
+      <nav class="tabs" role="tablist">
+        <button class="tab-btn active" data-tab="json" type="button">JSON Formatter</button>
+        <button class="tab-btn" data-tab="encode" type="button">Encode &amp; Hash</button>
+        <button class="tab-btn" data-tab="keygen" type="button">Password &amp; UUID</button>
+        <button class="tab-btn" data-tab="time" type="button">Timestamp</button>
+        <button class="tab-btn" data-tab="regex" type="button">Regex Tester</button>
+      </nav>
+    </div>
+  </header>
 
-    <main class="grid">
-      <article>
-        <h2>Systemd Service Diagnostics</h2>
-        <p>Quick commands to inspect active socket listeners, unit status, and recent journal entries.</p>
-        <pre><code>ss -tlnp
-systemctl status --no-pager
-journalctl -n 50 --no-pager</code></pre>
-      </article>
+  <main class="container">
+    <!-- 1. JSON Formatter -->
+    <section id="tab-json" class="panel active">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">JSON Formatter &amp; Validator</h2>
+            <p class="card-desc">Format, minify, and validate JSON payloads locally.</p>
+          </div>
+          <div class="toolbar">
+            <select id="jsonIndent" style="width:auto">
+              <option value="2">2 Spaces</option>
+              <option value="4">4 Spaces</option>
+              <option value="tab">Tab</option>
+            </select>
+            <button class="btn btn-primary" id="btnJsonFmt" type="button">Format</button>
+            <button class="btn" id="btnJsonMin" type="button">Minify</button>
+            <button class="btn" id="btnJsonSample" type="button">Sample</button>
+            <button class="btn" id="btnJsonCopy" type="button">Copy Output</button>
+            <button class="btn" id="btnJsonClear" type="button">Clear</button>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label class="field-label" for="jsonIn">Input JSON</label>
+            <textarea id="jsonIn" placeholder='{"service":"api","enabled":true}'></textarea>
+          </div>
+          <div>
+            <label class="field-label" for="jsonOut">Formatted Output</label>
+            <textarea id="jsonOut" readonly placeholder="Formatted result will appear here..."></textarea>
+          </div>
+        </div>
+        <div id="jsonStatus" class="status-bar">Ready. Paste JSON and click Format or Minify.</div>
+      </div>
+    </section>
 
-      <article>
-        <h2>Kernel TCP &amp; BBR Check</h2>
-        <p>Verify active queue discipline and congestion control parameters on Debian/Ubuntu hosts.</p>
-        <pre><code>sysctl net.core.default_qdisc
-sysctl net.ipv4.tcp_congestion_control</code></pre>
-      </article>
+    <!-- 2. Encode & Hash -->
+    <section id="tab-encode" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">Base64, URL &amp; SHA Hash</h2>
+            <p class="card-desc">UTF-8 safe encoding, decoding, and Web Crypto digest calculation.</p>
+          </div>
+          <div class="toolbar">
+            <button class="btn btn-primary" id="btnB64Enc" type="button">Base64 Encode</button>
+            <button class="btn" id="btnB64Dec" type="button">Base64 Decode</button>
+            <button class="btn" id="btnUrlEnc" type="button">URL Encode</button>
+            <button class="btn" id="btnUrlDec" type="button">URL Decode</button>
+            <button class="btn" id="btnEncSwap" type="button">Swap</button>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label class="field-label" for="encIn">Source Text</label>
+            <textarea id="encIn" style="min-height:180px" placeholder="Enter text to encode, decode, or hash..."></textarea>
+          </div>
+          <div>
+            <label class="field-label" for="encOut">Transform Output</label>
+            <textarea id="encOut" readonly style="min-height:180px" placeholder="Result..."></textarea>
+          </div>
+        </div>
+        <div style="margin-top:16px" class="kv-list">
+          <div class="kv-item">
+            <div class="kv-meta">
+              <div class="kv-key">SHA-256</div>
+              <div class="kv-val" id="hash256">—</div>
+            </div>
+            <button class="btn" data-copy="hash256" type="button">Copy</button>
+          </div>
+          <div class="kv-item">
+            <div class="kv-meta">
+              <div class="kv-key">SHA-512</div>
+              <div class="kv-val" id="hash512">—</div>
+            </div>
+            <button class="btn" data-copy="hash512" type="button">Copy</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
-      <article>
-        <h2>TLS Handshake Inspection</h2>
-        <p>Validate ALPN negotiation and TLS 1.3 certificate chain from the command line.</p>
-        <pre><code>openssl s_client -connect 127.0.0.1:443 -alpn h2 &lt;/dev/null</code></pre>
-      </article>
-    </main>
+    <!-- 3. Password & UUID -->
+    <section id="tab-keygen" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">CSPRNG Password &amp; Token Generator</h2>
+            <p class="card-desc">Generated in-browser using window.crypto.getRandomValues().</p>
+          </div>
+          <div class="toolbar">
+            <button class="btn btn-primary" id="btnGenAll" type="button">Regenerate All</button>
+          </div>
+        </div>
+        <div class="opt-row">
+          <label class="check-label">
+            Length:
+            <input id="pwLen" type="number" min="8" max="64" value="20" style="width:74px;padding:5px 8px">
+          </label>
+          <label class="check-label"><input type="checkbox" id="pwUpper" checked> A-Z</label>
+          <label class="check-label"><input type="checkbox" id="pwLower" checked> a-z</label>
+          <label class="check-label"><input type="checkbox" id="pwNum" checked> 0-9</label>
+          <label class="check-label"><input type="checkbox" id="pwSym" checked> Symbols</label>
+        </div>
+        <div class="kv-list">
+          <div class="kv-item">
+            <div class="kv-meta">
+              <div class="kv-key">Random Password</div>
+              <div class="kv-val" id="outPass">—</div>
+            </div>
+            <button class="btn" data-copy="outPass" type="button">Copy</button>
+          </div>
+          <div class="kv-item">
+            <div class="kv-meta">
+              <div class="kv-key">UUID v4</div>
+              <div class="kv-val" id="outUuid">—</div>
+            </div>
+            <button class="btn" data-copy="outUuid" type="button">Copy</button>
+          </div>
+          <div class="kv-item">
+            <div class="kv-meta">
+              <div class="kv-key">256-bit Hex Token</div>
+              <div class="kv-val" id="outHex">—</div>
+            </div>
+            <button class="btn" data-copy="outHex" type="button">Copy</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <footer>
-      <span>Static Archive</span>
-      <span>Maintained with plain HTML &amp; CSS</span>
-    </footer>
-  </div>
+    <!-- 4. Timestamp -->
+    <section id="tab-time" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">Unix Timestamp Converter</h2>
+            <p class="card-desc">Supports 10-digit seconds, 13-digit milliseconds, and ISO date strings.</p>
+          </div>
+          <div class="toolbar">
+            <button class="btn" id="btnNowFill" type="button">Use Current Time</button>
+          </div>
+        </div>
+        <div class="kv-item" style="margin-bottom:14px">
+          <div class="kv-meta">
+            <div class="kv-key">Current Unix Time (Seconds / Milliseconds)</div>
+            <div class="kv-val" id="liveClock">—</div>
+          </div>
+          <button class="btn" id="btnCopyLiveTs" type="button">Copy Sec</button>
+        </div>
+        <label class="field-label" for="tsInput">Input Timestamp or Date String</label>
+        <input type="text" id="tsInput" placeholder="e.g. 1763337600 or 2026-11-17T08:00:00Z">
+        <div style="margin-top:14px" class="kv-list">
+          <div class="kv-item">
+            <div class="kv-meta">
+              <div class="kv-key">Local Time</div>
+              <div class="kv-val" id="tsLocal">—</div>
+            </div>
+            <button class="btn" data-copy="tsLocal" type="button">Copy</button>
+          </div>
+          <div class="kv-item">
+            <div class="kv-meta">
+              <div class="kv-key">UTC / ISO-8601</div>
+              <div class="kv-val" id="tsUtc">—</div>
+            </div>
+            <button class="btn" data-copy="tsUtc" type="button">Copy</button>
+          </div>
+          <div class="kv-item">
+            <div class="kv-meta">
+              <div class="kv-key">Unix (Seconds / ms)</div>
+              <div class="kv-val" id="tsUnix">—</div>
+            </div>
+            <button class="btn" data-copy="tsUnix" type="button">Copy</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Regex Tester -->
+    <section id="tab-regex" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">Regular Expression Tester</h2>
+            <p class="card-desc">Live match highlighting and capture group inspection.</p>
+          </div>
+        </div>
+        <div class="grid-2" style="margin-bottom:14px">
+          <div>
+            <label class="field-label" for="rePattern">Pattern</label>
+            <input type="text" id="rePattern" value="\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b">
+          </div>
+          <div>
+            <label class="field-label" for="reFlags">Flags</label>
+            <input type="text" id="reFlags" value="g" placeholder="g, i, m">
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label class="field-label" for="reText">Test String</label>
+            <textarea id="reText" style="min-height:180px">Contact support@example.org or admin@mail.test for details.</textarea>
+          </div>
+          <div>
+            <label class="field-label">Highlighted Matches</label>
+            <div id="rePreview" class="regex-preview"></div>
+          </div>
+        </div>
+        <div id="reStatus" class="status-bar">Ready.</div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <span>DevBench · Browser-based developer utilities</span>
+      <span>100% client-side execution · No data leaves your device</span>
+    </div>
+  </footer>
+
+  <div id="toast" class="toast">Copied to clipboard</div>
+
+  <script>
+    (function () {
+      const $ = (id) => document.getElementById(id);
+
+      // Theme
+      const root = document.documentElement;
+      const savedTheme = localStorage.getItem("devbench_theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      root.setAttribute("data-theme", savedTheme || (prefersDark ? "dark" : "light"));
+
+      const updateThemeLabel = () => {
+        $("themeBtn").textContent = root.getAttribute("data-theme") === "dark" ? "Light Mode" : "Dark Mode";
+      };
+      updateThemeLabel();
+
+      $("themeBtn").addEventListener("click", () => {
+        const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+        root.setAttribute("data-theme", next);
+        localStorage.setItem("devbench_theme", next);
+        updateThemeLabel();
+      });
+
+      // Toast & Copy
+      let toastTimer = null;
+      const showToast = (msg) => {
+        const el = $("toast");
+        el.textContent = msg;
+        el.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+      };
+
+      const copyText = async (text) => {
+        if (!text || text === "—") return;
+        try {
+          await navigator.clipboard.writeText(text);
+          showToast("Copied to clipboard");
+        } catch (_) {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+          showToast("Copied to clipboard");
+        }
+      };
+
+      document.querySelectorAll("[data-copy]").forEach((btn) => {
+        btn.addEventListener("click", () => copyText($(btn.dataset.copy).textContent));
+      });
+
+      // Tabs
+      document.querySelectorAll(".tab-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+          document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+          btn.classList.add("active");
+          $("tab-" + btn.dataset.tab).classList.add("active");
+        });
+      });
+
+      // 1. JSON Formatter
+      const setJsonStatus = (msg, type) => {
+        const el = $("jsonStatus");
+        el.textContent = msg;
+        el.className = "status-bar" + (type ? " " + type : "");
+      };
+
+      const runJson = (minify) => {
+        const raw = $("jsonIn").value.trim();
+        if (!raw) {
+          $("jsonOut").value = "";
+          setJsonStatus("Input is empty.", "");
+          return;
+        }
+        try {
+          const parsed = JSON.parse(raw);
+          const indentVal = $("jsonIndent").value;
+          const space = minify ? 0 : (indentVal === "tab" ? "\t" : Number(indentVal));
+          const out = JSON.stringify(parsed, null, space);
+          $("jsonOut").value = out;
+          const bytes = new TextEncoder().encode(out).length;
+          setJsonStatus(`Valid JSON · ${bytes} bytes`, "ok");
+        } catch (err) {
+          setJsonStatus("Syntax Error: " + err.message, "err");
+        }
+      };
+
+      $("btnJsonFmt").addEventListener("click", () => runJson(false));
+      $("btnJsonMin").addEventListener("click", () => runJson(true));
+      $("btnJsonCopy").addEventListener("click", () => copyText($("jsonOut").value));
+      $("btnJsonClear").addEventListener("click", () => {
+        $("jsonIn").value = "";
+        $("jsonOut").value = "";
+        setJsonStatus("Cleared.", "");
+      });
+      $("btnJsonSample").addEventListener("click", () => {
+        $("jsonIn").value = JSON.stringify({
+          project: "devbench-web",
+          version: "2.4.0",
+          features: ["json", "hash", "keygen", "timestamp", "regex"],
+          runtime: { clientOnly: true, telemetry: false }
+        });
+        runJson(false);
+      });
+
+      // 2. Encode & Hash
+      const updateHashes = async () => {
+        const val = $("encIn").value;
+        if (!val) {
+          $("hash256").textContent = "—";
+          $("hash512").textContent = "—";
+          return;
+        }
+        if (!window.crypto || !window.crypto.subtle) {
+          $("hash256").textContent = "Requires HTTPS secure context";
+          $("hash512").textContent = "Requires HTTPS secure context";
+          return;
+        }
+        const data = new TextEncoder().encode(val);
+        const toHex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+        const [d256, d512] = await Promise.all([
+          crypto.subtle.digest("SHA-256", data),
+          crypto.subtle.digest("SHA-512", data)
+        ]);
+        $("hash256").textContent = toHex(d256);
+        $("hash512").textContent = toHex(d512);
+      };
+
+      $("encIn").addEventListener("input", updateHashes);
+
+      $("btnB64Enc").addEventListener("click", () => {
+        try {
+          const bytes = new TextEncoder().encode($("encIn").value);
+          let bin = "";
+          bytes.forEach((b) => { bin += String.fromCharCode(b); });
+          $("encOut").value = btoa(bin);
+        } catch (e) { $("encOut").value = "Error: " + e.message; }
+      });
+
+      $("btnB64Dec").addEventListener("click", () => {
+        try {
+          const bin = atob($("encIn").value.trim());
+          const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+          $("encOut").value = new TextDecoder().decode(bytes);
+        } catch (e) { $("encOut").value = "Decode Error: Invalid Base64 input"; }
+      });
+
+      $("btnUrlEnc").addEventListener("click", () => {
+        $("encOut").value = encodeURIComponent($("encIn").value);
+      });
+
+      $("btnUrlDec").addEventListener("click", () => {
+        try {
+          $("encOut").value = decodeURIComponent($("encIn").value);
+        } catch (e) { $("encOut").value = "Decode Error: Malformed URI sequence"; }
+      });
+
+      $("btnEncSwap").addEventListener("click", () => {
+        const tmp = $("encIn").value;
+        $("encIn").value = $("encOut").value;
+        $("encOut").value = tmp;
+        updateHashes();
+      });
+
+      // 3. Password & UUID
+      const randInt = (max) => {
+        const arr = new Uint32Array(1);
+        const limit = Math.floor(0x100000000 / max) * max;
+        let v;
+        do {
+          crypto.getRandomValues(arr);
+          v = arr[0];
+        } while (v >= limit);
+        return v % max;
+      };
+
+      const genCredentials = () => {
+        const len = Math.min(64, Math.max(8, Number($("pwLen").value) || 20));
+        $("pwLen").value = len;
+        let pool = "";
+        if ($("pwUpper").checked) pool += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        if ($("pwLower").checked) pool += "abcdefghijklmnopqrstuvwxyz";
+        if ($("pwNum").checked) pool += "0123456789";
+        if ($("pwSym").checked) pool += "!@#$%^&*()-_=+[]{}";
+        if (!pool) {
+          $("outPass").textContent = "Select at least one character set";
+        } else {
+          let pw = "";
+          for (let i = 0; i < len; i++) pw += pool[randInt(pool.length)];
+          $("outPass").textContent = pw;
+        }
+
+        if (crypto.randomUUID) {
+          $("outUuid").textContent = crypto.randomUUID();
+        } else {
+          const b = new Uint8Array(16);
+          crypto.getRandomValues(b);
+          b[6] = (b[6] & 0x0f) | 0x40;
+          b[8] = (b[8] & 0x3f) | 0x80;
+          const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+          $("outUuid").textContent = `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+        }
+
+        const tok = new Uint8Array(32);
+        crypto.getRandomValues(tok);
+        $("outHex").textContent = Array.from(tok, (x) => x.toString(16).padStart(2, "0")).join("");
+      };
+
+      $("btnGenAll").addEventListener("click", genCredentials);
+      ["pwLen", "pwUpper", "pwLower", "pwNum", "pwSym"].forEach((id) => $(id).addEventListener("change", genCredentials));
+      genCredentials();
+
+      // 4. Timestamp
+      let currentSec = Math.floor(Date.now() / 1000);
+      const tickClock = () => {
+        const now = Date.now();
+        currentSec = Math.floor(now / 1000);
+        $("liveClock").textContent = `${currentSec}  |  ${now} ms`;
+      };
+      tickClock();
+      setInterval(tickClock, 1000);
+
+      $("btnCopyLiveTs").addEventListener("click", () => copyText(String(currentSec)));
+
+      const convertTs = () => {
+        const raw = $("tsInput").value.trim();
+        if (!raw) {
+          $("tsLocal").textContent = "—";
+          $("tsUtc").textContent = "—";
+          $("tsUnix").textContent = "—";
+          return;
+        }
+        let d;
+        if (/^-?\d+$/.test(raw)) {
+          const n = Number(raw);
+          d = new Date(raw.length >= 13 ? n : n * 1000);
+        } else {
+          d = new Date(raw);
+        }
+        if (isNaN(d.getTime())) {
+          $("tsLocal").textContent = "Invalid date or timestamp";
+          $("tsUtc").textContent = "—";
+          $("tsUnix").textContent = "—";
+          return;
+        }
+        $("tsLocal").textContent = d.toLocaleString();
+        $("tsUtc").textContent = d.toISOString();
+        $("tsUnix").textContent = `${Math.floor(d.getTime() / 1000)} s / ${d.getTime()} ms`;
+      };
+
+      $("tsInput").addEventListener("input", convertTs);
+      $("btnNowFill").addEventListener("click", () => {
+        $("tsInput").value = String(Math.floor(Date.now() / 1000));
+        convertTs();
+      });
+      $("tsInput").value = String(currentSec);
+      convertTs();
+
+      // 5. Regex Tester
+      const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+      const runRegex = () => {
+        const pat = $("rePattern").value;
+        const flags = $("reFlags").value.replace(/[^dgimsuvy]/g, "");
+        const text = $("reText").value;
+        const status = $("reStatus");
+
+        if (!pat) {
+          $("rePreview").textContent = text;
+          status.textContent = "Enter a regex pattern.";
+          status.className = "status-bar";
+          return;
+        }
+
+        try {
+          const re = new RegExp(pat, flags);
+          let html = "";
+          let last = 0;
+          let count = 0;
+          let m;
+
+          while ((m = re.exec(text)) !== null && count < 500) {
+            html += esc(text.slice(last, m.index));
+            html += "<mark>" + esc(m[0]) + "</mark>";
+            last = m.index + m[0].length;
+            count++;
+            if (m[0].length === 0) {
+              if (re.lastIndex >= text.length) break;
+              re.lastIndex++;
+            }
+            if (!re.global) break;
+          }
+          html += esc(text.slice(last));
+          $("rePreview").innerHTML = html || esc(text);
+          status.textContent = `${count} match(es) found.`;
+          status.className = "status-bar ok";
+        } catch (err) {
+          $("rePreview").textContent = text;
+          status.textContent = "Regex Error: " + err.message;
+          status.className = "status-bar err";
+        }
+      };
+
+      ["rePattern", "reFlags", "reText"].forEach((id) => $(id).addEventListener("input", runRegex));
+      runRegex();
+    })();
+  </script>
 </body>
 </html>
