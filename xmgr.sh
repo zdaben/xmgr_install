@@ -986,13 +986,21 @@ install_xray() {
     fi
 
     if [ -z "$SNI" ]; then
+        local DEF_EXT_SNI="www.bing.com"
+        if [ -n "$DEF_SNI" ]; then
+            local is_local_skip=0
+            local ld
+            for ld in "${VALID_LOCAL_DOMAINS[@]}"; do
+                [ "$DEF_SNI" = "$ld" ] && is_local_skip=1 && break
+            done
+            [ $is_local_skip -eq 0 ] && DEF_EXT_SNI="$DEF_SNI"
+        fi
+
         echo ""
         echo -e "${yellow}[提示] 请输入一个支持 TLS 1.3 的常见合规网站域名（如同地区云厂商/门户/工具站）。${plain}"
         while true; do
-            local prompt_sni="请输入外部伪装域名 (SNI)"
-            [ -n "$DEF_SNI" ] && prompt_sni+=" [直接回车沿用: ${DEF_SNI}]"
-            read -p "${prompt_sni}: " SNI
-            SNI=${SNI:-$DEF_SNI}
+            read -p "$(echo -e "请输入外部伪装域名 (SNI) [默认: ${green}${DEF_EXT_SNI}${plain}]: ")" SNI
+            SNI=${SNI:-$DEF_EXT_SNI}
             SNI=$(echo "$SNI" | xargs)
             if [ -z "$SNI" ]; then
                 echo -e "${red}[错误] 伪装域名不能为空。${plain}"
@@ -1010,6 +1018,7 @@ install_xray() {
                     TARGET_ADDR="${SNI}:443"
                     break
                 fi
+                SNI=""
             fi
         done
     fi
