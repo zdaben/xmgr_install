@@ -33,7 +33,7 @@ VPS_IPV6=""
 LAST_CHECK_MSG=""
 SETUP_CADDY_DOMAIN=""
 SETUP_CADDY_TARGET=""
-SETUP_CADDY_PORT=""
+SETUP_CADDY_TAKEOVER=0
 
 # 检查是否为 Root 用户
 [[ $EUID -ne 0 ]] && echo -e "${red}[错误] 必须使用 root 用户运行此脚本。${plain}" && exit 1
@@ -198,9 +198,14 @@ is_port_in_use() {
     ss -tln 2>/dev/null | grep -qE "(:${p}|\[::\]:${p})\s"
 }
 
+is_port_available_for_xray() {
+    local p="$1"
+    ! is_port_in_use "$p" || ss -tlnp 2>/dev/null | grep -E "(:${p}|\[::\]:${p})\s" | grep -q '"xray"'
+}
+
 random_high_port() {
     local p
-    for _ in {1..20}; do
+    for _ in {1..30}; do
         p=$(shuf -i 10000-60000 -n 1)
         if ! is_port_in_use "$p"; then
             echo "$p"
@@ -218,15 +223,28 @@ check_reality_sni() {
     local domain="$1"
     local target_ip="${2:-}"
     local target_port="${3:-443}"
-    local ping_out=""
-    local sni_block=""
     LAST_CHECK_MSG=""
 
+    # 本机站点直接用 openssl 验证（规避 xray tls ping 先发无 SNI 探测导致本机 Caddy 超时误判）
     if [ -n "$target_ip" ]; then
-        ping_out=$(timeout 8 xray tls ping -ip "$target_ip" "${domain}:${target_port}" 2>&1)
-    else
-        ping_out=$(timeout 8 xray tls ping "${domain}:${target_port}" 2>&1)
+        local connect_addr s_out
+        connect_addr=$(format_host_port "$target_ip" "$target_port")
+        s_out=$(echo | timeout 4 openssl s_client -connect "$connect_addr" -servername "$domain" -tls1_3 -curves X25519 -alpn h2 2>&1 || true)
+        if ! echo "$s_out" | grep -qE "New, TLSv1\.3|Protocol[[:space:]]*:[[:space:]]*TLSv1\.3"; then
+            LAST_CHECK_MSG="TLS 握手失败或不支持 TLS 1.3 + X25519"
+            return 1
+        fi
+        if echo "$s_out" | grep -q "ALPN protocol: h2"; then
+            LAST_CHECK_MSG="TLS1.3+H2+X25519"
+        else
+            LAST_CHECK_MSG="TLS1.3+X25519 (建议开启 HTTP/2)"
+        fi
+        return 0
     fi
+
+    local ping_out=""
+    local sni_block=""
+    ping_out=$(timeout 8 xray tls ping "${domain}:${target_port}" 2>&1)
 
     sni_block=$(echo "$ping_out" | awk '/Pinging with SNI/{flag=1} flag')
     if [ -z "$sni_block" ] || ! echo "$sni_block" | grep -q "Handshake succeeded"; then
@@ -267,10 +285,8 @@ check_reality_sni() {
         fi
     fi
 
-    local connect_addr
-    connect_addr=$(format_host_port "${target_ip:-$domain}" "$target_port")
     local alpn_out
-    alpn_out=$(echo | timeout 4 openssl s_client -connect "$connect_addr" -servername "$domain" -alpn h2 2>/dev/null || true)
+    alpn_out=$(echo | timeout 4 openssl s_client -connect "${domain}:${target_port}" -servername "$domain" -alpn h2 2>/dev/null || true)
     if ! echo "$alpn_out" | grep -q "ALPN protocol: h2"; then
         LAST_CHECK_MSG="TLS1.3+X25519 (建议开启 HTTP/2)"
         return 0
@@ -497,7 +513,7 @@ setup_caddy_site() {
     local caller="${1:-standalone}"
     SETUP_CADDY_DOMAIN=""
     SETUP_CADDY_TARGET=""
-    SETUP_CADDY_PORT=""
+    SETUP_CADDY_TAKEOVER=0
 
     if [ "$caller" = "standalone" ]; then
         install_deps
@@ -627,18 +643,18 @@ setup_caddy_site() {
             if caddy validate --config "$CADDY_FILE" >/dev/null 2>&1 && systemctl reload caddy >/dev/null 2>&1; then
                 sleep 1
                 if ! is_port_in_use 443 && is_port_in_use 8443; then
-                    echo -e "自动配置: ${cyan}已将 Web 站点切换至本地 8443，443 主端口由 Xray 独占接管（80 端口保留用于证书续签）${plain}"
-                    SETUP_CADDY_PORT=443
+                    echo -e "自动配置: ${cyan}已将 Web 站点切换至本地 8443，443 主端口已释放给 Xray（80 端口保留用于证书续签）${plain}"
+                    SETUP_CADDY_TAKEOVER=1
                     SETUP_CADDY_TARGET=$(format_host_port "$lo_ip" "8443")
                     return 0
                 fi
             fi
             write_caddyfile "$domain" "standard"
             systemctl reload caddy >/dev/null 2>&1 || true
-            SETUP_CADDY_PORT=""
+            SETUP_CADDY_TAKEOVER=0
             SETUP_CADDY_TARGET=$(format_host_port "$lo_ip" "443")
         else
-            SETUP_CADDY_PORT=443
+            SETUP_CADDY_TAKEOVER=1
             SETUP_CADDY_TARGET=$(format_host_port "$lo_ip" "8443")
         fi
     else
@@ -836,7 +852,7 @@ migrate_local_web_to_8443() {
 # 核心功能函数
 # ==========================================
 
-# 1. 最优兼容部署流程
+# 1. 部署与配置流程
 install_xray() {
     clear
     echo -e "${green}=================================================${plain}"
@@ -851,7 +867,7 @@ install_xray() {
 
     local OLD_PORT=""
     local DEF_SNI=""
-    local DEF_NAME="xmgr-node"
+    local DEF_NAME="xmgr-links"
     if [ -f "$CACHE_FILE" ]; then
         # shellcheck disable=SC1090
         source "$CACHE_FILE"
@@ -894,6 +910,7 @@ install_xray() {
     local TARGET_ADDR=""
     local PORT=""
     local USE_LOCAL_SITE=0
+    local TAKEOVER_443=0
 
     if detect_local_websites; then
         echo -e "  [${green}0${plain}] 不使用本地站点，改用外部伪装域名"
@@ -917,14 +934,14 @@ install_xray() {
             fi
 
             if [ "$ALREADY_MIGRATED" -eq 1 ]; then
-                PORT=443
+                TAKEOVER_443=1
                 TARGET_ADDR=$(format_host_port "$LOCAL_PROBE_IP" "8443")
             else
                 local port443_proc
                 port443_proc=$(ss -tlnp 2>/dev/null | awk '/(:443|\[::\]:443)\s/ {print $0}')
                 if echo "$port443_proc" | grep -q '"caddy"' && grep -q "# Managed by xmgr" "$CADDY_FILE" 2>/dev/null; then
                     if migrate_local_web_to_8443 "$SNI"; then
-                        PORT=443
+                        TAKEOVER_443=1
                         TARGET_ADDR=$(format_host_port "$LOCAL_PROBE_IP" "8443")
                     else
                         TARGET_ADDR=$(format_host_port "$LOCAL_PROBE_IP" "443")
@@ -935,7 +952,7 @@ install_xray() {
                     echo -e "（选 N 则完全不改动现有网站配置，Xray 自动使用其他可用端口）"
                     read -p "是否接管 443 端口？(y/N): " take_443
                     if [[ "$take_443" =~ ^[Yy]$ ]] && migrate_local_web_to_8443 "$SNI"; then
-                        PORT=443
+                        TAKEOVER_443=1
                         if ss -tln 2>/dev/null | grep -q "127.0.0.1:8443"; then
                             TARGET_ADDR="127.0.0.1:8443"
                         else
@@ -961,7 +978,7 @@ install_xray() {
                 USE_LOCAL_SITE=1
                 SNI="$SETUP_CADDY_DOMAIN"
                 TARGET_ADDR="$SETUP_CADDY_TARGET"
-                PORT="$SETUP_CADDY_PORT"
+                TAKEOVER_443="$SETUP_CADDY_TAKEOVER"
             else
                 echo -e "${yellow}[提示] 自动建站未完成，将转为使用外部伪装域名。${plain}"
             fi
@@ -1008,24 +1025,46 @@ install_xray() {
         fi
     fi
 
-    # ---- 步骤 3: 自动选择最优可用端口（443 空闲 > 复用原高位端口 > 随机高位端口） ----
-    if [ -z "$PORT" ]; then
-        if ! is_port_in_use 443; then
-            PORT=443
-        elif [ -n "$OLD_PORT" ] && [ "$OLD_PORT" != "80" ] && { ! is_port_in_use "$OLD_PORT" || ss -tlnp 2>/dev/null | grep -E "(:${OLD_PORT}|\[::\]:${OLD_PORT})\s" | grep -q '"xray"'; }; then
-            PORT="$OLD_PORT"
-        else
-            PORT=$(random_high_port)
-        fi
-        echo -e "监听端口: ${green}${PORT}${plain} (已自动选定最优可用端口)"
+    # ---- 步骤 3: 默认检测冲突并随机生成/推荐端口，同时支持用户手动指定 ----
+    local DEF_PORT=""
+    if [ "$TAKEOVER_443" -eq 1 ] && is_port_available_for_xray 443; then
+        DEF_PORT=443
+    elif [ -n "$OLD_PORT" ] && [ "$OLD_PORT" != "80" ] && ! { [ "$USE_LOCAL_SITE" -eq 1 ] && [ "$OLD_PORT" = "8443" ]; } && is_port_available_for_xray "$OLD_PORT"; then
+        DEF_PORT="$OLD_PORT"
+    else
+        DEF_PORT=$(random_high_port)
     fi
+
+    echo ""
+    while true; do
+        read -p "$(echo -e "请输入 Xray 监听端口 [默认: ${green}${DEF_PORT}${plain}]: ")" PORT
+        PORT=${PORT:-$DEF_PORT}
+        PORT=$(echo "$PORT" | xargs)
+        if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+            echo -e "${red}[错误] 请输入 1-65535 之间的数字。${plain}"
+            continue
+        fi
+        if [ "$PORT" = "80" ]; then
+            echo -e "${red}[错误] 80 端口需预留给 Web 服务与证书续签，请更换其他端口。${plain}"
+            continue
+        fi
+        if [ "$USE_LOCAL_SITE" -eq 1 ] && [ "$PORT" = "8443" ]; then
+            echo -e "${red}[错误] 8443 端口已被本地伪装站点占用，请更换其他端口。${plain}"
+            continue
+        fi
+        if ! is_port_available_for_xray "$PORT"; then
+            echo -e "${red}[错误] 端口 ${PORT} 已被系统其他程序占用，请更换。${plain}"
+            continue
+        fi
+        break
+    done
 
     # ---- 步骤 4: 节点备注名称 ----
     echo ""
-    read -p "$(echo -e "请输入节点备注名称 [直接回车默认: ${green}${DEF_NAME}${plain}]: ")" LINK_NAME
+    read -p "$(echo -e "请输入节点备注名称 [默认: ${green}${DEF_NAME}${plain}]: ")" LINK_NAME
     LINK_NAME=${LINK_NAME:-$DEF_NAME}
     LINK_NAME=$(echo "$LINK_NAME" | xargs)
-    [ -z "$LINK_NAME" ] && LINK_NAME="xmgr-node"
+    [ -z "$LINK_NAME" ] && LINK_NAME="xmgr-links"
 
     # ---- 步骤 5: 生成高兼容配置并启动服务 ----
     echo ""
