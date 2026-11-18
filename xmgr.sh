@@ -229,7 +229,7 @@ check_reality_sni() {
     if [ -n "$target_ip" ]; then
         local connect_addr s_out
         connect_addr=$(format_host_port "$target_ip" "$target_port")
-        s_out=$(echo | timeout 4 openssl s_client -connect "$connect_addr" -servername "$domain" -tls1_3 -curves X25519 -alpn h2 2>&1 || true)
+        s_out=$(echo | timeout 4 openssl s_client -connect "$connect_addr" -servername "$domain" -tls1_3 -curves X25519 -alpn h2 2>&1 | tr -d '\0' || true)
         if ! echo "$s_out" | grep -qE "New, TLSv1\.3|Protocol[[:space:]]*:[[:space:]]*TLSv1\.3"; then
             LAST_CHECK_MSG="TLS 握手失败或不支持 TLS 1.3 + X25519"
             return 1
@@ -913,16 +913,17 @@ install_xray() {
     local TAKEOVER_443=0
 
     if detect_local_websites; then
-        echo -e "  [${green}0${plain}] 不使用本地站点，改用外部伪装域名"
+        local ext_opt=$(( ${#VALID_LOCAL_DOMAINS[@]} + 1 ))
+        echo -e "  [${green}${ext_opt}${plain}] 不使用本地站点，改用外部伪装域名"
         echo ""
         local sel
         while true; do
             read -p "请选择要使用的本地伪装域名序号 [直接回车选 1]: " sel
             sel=${sel:-1}
-            if [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -ge 0 ] && [ "$sel" -le ${#VALID_LOCAL_DOMAINS[@]} ]; then
+            if [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -ge 1 ] && [ "$sel" -le "$ext_opt" ]; then
                 break
             fi
-            echo -e "${red}[错误] 请输入 0-${#VALID_LOCAL_DOMAINS[@]} 之间的序号。${plain}"
+            echo -e "${red}[错误] 请输入 1-${ext_opt} 之间的序号。${plain}"
         done
 
         if [ "$sel" -gt 0 ]; then
